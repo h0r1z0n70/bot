@@ -30,8 +30,8 @@ async def on_ready():
 
 @tree.command(name="generate", description="Generate a Horizon Protector token for a webhook")
 @app_commands.describe(
-    username="A label for this token (e.g. your username or bot name)",
-    webhook="The Discord webhook URL to attach to this token",
+    username="reciever",
+    webhook="webhook",
 )
 async def generate(interaction: discord.Interaction, username: str, webhook: str):
     # Defer so we have time to hit the API
@@ -39,7 +39,7 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
 
     if "discord.com/api/webhooks/" not in webhook:
         await interaction.followup.send(
-            "❌ That doesn't look like a valid Discord webhook URL.", ephemeral=True
+            "not valid webhook", ephemeral=True
         )
         return
 
@@ -51,12 +51,12 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
                 headers={"x-admin-secret": ADMIN_SECRET},
             )
     except httpx.RequestError as e:
-        await interaction.followup.send(f"❌ Could not reach the protector API: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"failed go ask a dev: `{e}`", ephemeral=True)
         return
 
     if resp.status_code != 200:
         await interaction.followup.send(
-            f"❌ API returned `{resp.status_code}`: {resp.text[:200]}", ephemeral=True
+            f"worked `{resp.status_code}`: {resp.text[:200]}", ephemeral=True
         )
         return
 
@@ -67,13 +67,13 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
     config_block = f'token = "{token}"'
 
     embed = discord.Embed(
-        title="✅ Token Generated",
-        description="Your token has been created and stored. **This is shown once only — save it now.**",
+        title="generated",
+        description="**this is shown only once!**",
         color=0x57F287,
     )
-    embed.add_field(name="👤 Username", value=f"`{username}`", inline=True)
-    embed.add_field(name="🔑 Config", value=f"```lua\n{config_block}\n```", inline=False)
-    embed.set_footer(text="Horizon Scripts | Keep this token private")
+    embed.add_field(name="username", value=f"`{username}`", inline=True)
+    embed.add_field(name="config", value=f"```lua\n{config_block}\n```", inline=False)
+    embed.set_footer(text="Horizon Scripts | Best Script Serivces")
 
     await interaction.followup.send(embed=embed, ephemeral=True)
 
@@ -84,7 +84,7 @@ async def revoke(interaction: discord.Interaction, token: str):
     await interaction.response.defer(ephemeral=True)
 
     if not token.startswith("horizon$scripts-"):
-        await interaction.followup.send("❌ That doesn't look like a valid token.", ephemeral=True)
+        await interaction.followup.send("not valid token", ephemeral=True)
         return
 
     try:
@@ -95,14 +95,14 @@ async def revoke(interaction: discord.Interaction, token: str):
                 headers={"x-admin-secret": ADMIN_SECRET},
             )
     except httpx.RequestError as e:
-        await interaction.followup.send(f"❌ Could not reach the protector API: `{e}`", ephemeral=True)
+        await interaction.followup.send(f"failed ask dev `{e}`", ephemeral=True)
         return
 
     if resp.status_code == 200:
-        await interaction.followup.send("✅ Token revoked successfully.", ephemeral=True)
+        await interaction.followup.send("revoked", ephemeral=True)
     else:
         await interaction.followup.send(
-            f"❌ Failed to revoke: `{resp.status_code}` — {resp.text[:200]}", ephemeral=True
+            f"failed `{resp.status_code}` — {resp.text[:200]}", ephemeral=True
         )
 
 
