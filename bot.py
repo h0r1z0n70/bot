@@ -80,17 +80,16 @@ async def make_paste(content: str, title: str) -> str | None:
                         "Content-Type": "application/json",
                     },
                 )
-            print(f"pastefy status: {resp.status_code}")
-            print(f"pastefy response: {resp.text[:300]}")
             if resp.status_code in (200, 201):
                 data = resp.json()
-                paste_id = data.get("id") or data.get("paste") or data.get("paste_id")
+                paste_data = data.get("paste", {})
+                paste_id = paste_data.get("id")
                 if paste_id:
-                    return f"https://pastefy.app/{paste_id}"
+                    return f"https://pastefy.app/{paste_id}/raw"
                 else:
                     print(f"no id in response: {data}")
             else:
-                print(f"pastefy error body: {resp.text}")
+                print(f"pastefy error: {resp.status_code} - {resp.text}")
         except httpx.RequestError as e:
             print(f"pastefy request error: {e}")
         except Exception as e:
