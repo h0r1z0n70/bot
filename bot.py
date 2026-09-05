@@ -6,7 +6,7 @@ import time
 
 import discord
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 import httpx
 from dotenv import load_dotenv
 
@@ -16,7 +16,6 @@ TOKEN          = os.environ["discord_bot_token"]
 PROTECTOR      = os.environ["protector_url"].rstrip("/")
 SECRET         = os.environ["admin_secret"]
 PASTEFY_KEY    = os.environ.get("pastefy_api_key", "")
-LEADERBOARD_CH = int(os.environ.get("leaderboard_channel_id", "0"))
 STATUS_OWNER   = 1454388467713704046
 
 PASTEFY_BASE   = "https://pastefy.app/api/v2"
@@ -30,10 +29,7 @@ name_cache: dict[str, tuple[float, bool]] = {}
 paste_lock  = asyncio.Lock()
 
 generated_users: dict[int, str] = {}
-
 generated_names: dict[int, str] = {}
-
-
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -135,7 +131,7 @@ async def register_token_api(
                 json={
                     "webhook_url": webhook_url,
                     "username":    username,
-                    "discord_id":  str(discord_id),
+                    "discord_id":  discord_id,  # changed to int
                 },
                 headers={"x-admin-secret": SECRET},
             )
@@ -214,7 +210,6 @@ def build_autojoiner_script(token: str, username: str, game: str) -> str:
         "print('[horizon] joining | user=' .. best.username .. ' value=$' .. tostring(best.total_value))\n"
         "TS:TeleportToPlaceInstance(tonumber(best.placeid), best.jobid)\n"
     )
-
 
 
 class MobileCopyView(discord.ui.View):
@@ -419,6 +414,35 @@ async def auto_joiner(
     await interaction.followup.send("script sent to your DMs", ephemeral=True)
 
 
+@tree.command(name="leaderboard", description="show the hit leaderboard")
+async def leaderboard(interaction: discord.Interaction):
+    print(f"[DEBUG] /leaderboard | caller={interaction.user.id}")
+    await interaction.response.defer()
+
+    lb = await fetch_leaderboard()
+    if not lb:
+        await interaction.followup.send("no data yet", ephemeral=True)
+        return
+
+    lines = []
+    for i, entry in enumerate(lb[:15], start=1):
+        did        = entry.get("discord_id", "unknown")
+        hits       = entry.get("total_hits", 0)
+        c_val      = entry.get("total_claimed_value", 0.0)
+        user_label = f"<@{did}>" if str(did).isdigit() else str(did)
+        lines.append(
+            f"**{i}.** {user_label}\n"
+            f"total hits: `{hits}` , total claimed value: `${c_val:,.2f}`"
+        )
+
+    embed = discord.Embed(
+        title      = "hit counter",
+        description = "\n\n".join(lines) or "no data yet",
+        color      = 0x57F287,
+    )
+    await interaction.followup.send(embed=embed)
+
+
 @bot.command(name="status")
 async def status_cmd(ctx: commands.Context):
     print(f"[DEBUG] .status | caller={ctx.author.id}")
@@ -447,73 +471,11 @@ async def status_cmd(ctx: commands.Context):
     await ctx.send(embed=embed)
 
 
-leaderboard_message_id: int | None = None
-
-
-@tasks.loop(hours=1)
-async def leaderboard_loop():
-    global leaderboard_message_id
-    print("[DEBUG] leaderboard_loop tick")
-
-    if not LEADERBOARD_CH:
-        print("[DEBUG] no leaderboard channel set, skipping")
-        return
-
-    channel = bot.get_channel(LEADERBOARD_CH)
-    if not channel:
-        print(f"[DEBUG] channel {LEADERBOARD_CH} not found")
-        return
-
-    lb = await fetch_leaderboard()
-    if not lb:
-        print("[DEBUG] leaderboard empty, skipping")
-        return
-
-    lines = []
-    for i, entry in enumerate(lb[:15], start=1):
-        did        = entry.get("discord_id", "unknown")
-        hits       = entry.get("total_hits", 0)
-        c_val      = entry.get("total_claimed_value", 0.0)
-        user_label = f"<@{did}>" if did.isdigit() else did
-        lines.append(
-            f"**{i}.** {user_label}\n"
-            f"total hits: `{hits}` , total claimed value: `${c_val:,.2f}`"
-        )
-
-    embed = discord.Embed(
-        title      = "hit counter",
-        description = "\n\n".join(lines) or "no data yet",
-        color      = 0x57F287,
-    )
-
-    print(f"[DEBUG] leaderboard built | entries={len(lb)}")
-
-    try:
-        if leaderboard_message_id:
-            try:
-                msg = await channel.fetch_message(leaderboard_message_id)
-                await msg.edit(embed=embed)
-                print(f"[DEBUG] leaderboard edited | msg={leaderboard_message_id}")
-                return
-            except discord.NotFound:
-                print("[DEBUG] leaderboard msg not found, reposting")
-
-        msg = await channel.send(embed=embed)
-        leaderboard_message_id = msg.id
-        print(f"[DEBUG] leaderboard posted | msg={msg.id}")
-    except Exception as e:
-        print(f"[DEBUG] leaderboard send error: {e}")
-
-
 @bot.event
 async def on_ready():
     print(f"[DEBUG] on_ready | user={bot.user} id={bot.user.id}")
-
     await tree.sync()
     print("[DEBUG] slash commands synced globally")
-
-    leaderboard_loop.start()
-    print("[DEBUG] leaderboard loop started")
 
 
 @bot.event
