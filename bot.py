@@ -152,7 +152,7 @@ async def fetch_leaderboard() -> list[dict]:
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(
                 f"{PROTECTOR}/api/v3/leaderboard",
-                headers={"x-admin-secret": SECRET},
+                params={"x_admin_secret": SECRET},
             )
         if resp.status_code == 200:
             data = resp.json().get("leaderboard", [])
